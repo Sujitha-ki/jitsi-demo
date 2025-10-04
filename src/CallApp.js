@@ -1,188 +1,209 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 const USERS = [
-  { id: 1, name: "Alice", online: true },
-  { id: 2, name: "Bob", online: true },
-  { id: 3, name: "Charlie", online: false },
-  { id: 4, name: "David", online: true },
-  { id: 5, name: "Eve", online: false },
+  { id: 1, name: "Alice", username: "alice", password: "123" },
+  { id: 2, name: "Bob", username: "bob", password: "123" },
+  { id: 3, name: "Charlie", username: "charlie", password: "123" },
+  { id: 4, name: "David", username: "david", password: "123" },
 ];
 
-export default function CallApp() {
+const CALL_REQUEST_KEY = "call_requests";
+
+export default function MultiBrowserCallApp() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [callStatus, setCallStatus] = useState(null);
   const [roomName, setRoomName] = useState("");
   const jitsiContainerRef = useRef(null);
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-    setSelectedUsers([]);
-    setRoomName("");
+  // Poll for incoming requests
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!currentUser) return;
+
+      const allRequests =
+        JSON.parse(localStorage.getItem(CALL_REQUEST_KEY)) || [];
+      const now = Date.now();
+
+      // Filter for requests to current user that are pending and not expired
+      const pending = allRequests.filter(
+        (r) =>
+          r.to === currentUser.username &&
+          r.status === "pending" &&
+          now - r.timestamp < 180000 // 3 minutes
+      );
+
+      setIncomingRequests(pending);
+
+      // Auto-reject expired requests
+      const updatedRequests = allRequests.map((r) =>
+        r.status === "pending" && now - r.timestamp >= 180000
+          ? { ...r, status: "rejected" }
+          : r
+      );
+      localStorage.setItem(CALL_REQUEST_KEY, JSON.stringify(updatedRequests));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  // Update call status for sender
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const interval = setInterval(() => {
+      const allRequests =
+        JSON.parse(localStorage.getItem(CALL_REQUEST_KEY)) || [];
+      const sent = allRequests.filter((r) => r.from === currentUser.username);
+
+      sent.forEach((r) => {
+        if (r.status === "accepted") {
+          setCallStatus(`${r.to} accepted your call!`);
+          setRoomName(`Room-${currentUser.username}-${r.to}`);
+        } else if (r.status === "rejected") {
+          setCallStatus(`${r.to} rejected your call.`);
+        }
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  const handleLoginSubmit = () => {
+    const user = USERS.find(
+      (u) =>
+        u.username === loginForm.username && u.password === loginForm.password
+    );
+    if (user) setCurrentUser(user);
+    else alert("Invalid credentials");
   };
 
   const toggleUserSelect = (user) => {
-    setSelectedUsers((prev) => {
-      if (prev.find((u) => u.id === user.id)) {
-        return prev.filter((u) => u.id !== user.id);
-      }
-      return [...prev, user];
-    });
+    setSelectedUsers((prev) =>
+      prev.find((u) => u.username === user.username)
+        ? prev.filter((u) => u.username !== user.username)
+        : [...prev, user]
+    );
   };
 
-  //   const startCall = () => {
-  //     if (!currentUser) return;
+  const sendCallRequest = () => {
+    if (selectedUsers.length === 0) return alert("Select at least one user.");
+    const allRequests =
+      JSON.parse(localStorage.getItem(CALL_REQUEST_KEY)) || [];
+    const timestamp = Date.now();
 
-  //     // Check if any selected user is offline
-  //     const offlineUsers = selectedUsers.filter((u) => !u.online);
-  //     if (offlineUsers.length > 0) {
-  //       alert(
-  //         `The following users are offline: ${offlineUsers
-  //           .map((u) => u.name)
-  //           .join(", ")}. Can't start the call.`
-  //       );
-  //       return;
-  //     }
+    const newRequests = selectedUsers.map((u) => ({
+      from: currentUser.username,
+      to: u.username,
+      timestamp,
+      status: "pending",
+    }));
 
-  //     // Create a room name based on caller + selected users
-  //     const participants = [currentUser, ...selectedUsers]
-  //       .map((u) => u.name)
-  //       .join("-");
-  //     const room = `TestRoom-${participants}`;
-  //     setRoomName(room);
+    localStorage.setItem(
+      CALL_REQUEST_KEY,
+      JSON.stringify([...allRequests, ...newRequests])
+    );
+    alert("Call requests sent!");
+  };
 
-  //     // Launch Jitsi iframe
-  //     const domain = "meet.jit.si";
-  //     const options = {
-  //       roomName: room,
-  //       parentNode: jitsiContainerRef.current,
-  //       userInfo: {
-  //         displayName: currentUser.name,
-  //       },
-  //       configOverwrite: {
-  //         startWithVideoMuted: false,
-  //         startWithAudioMuted: false,
-  //       },
-  //       interfaceConfigOverwrite: {
-  //         TOOLBAR_BUTTONS: [
-  //           "microphone",
-  //           "camera",
-  //           "hangup",
-  //           "tileview",
-  //           "fullscreen",
-  //         ],
-  //       },
-  //     };
+  const respondToCall = (request, response) => {
+    const allRequests =
+      JSON.parse(localStorage.getItem(CALL_REQUEST_KEY)) || [];
+    const updated = allRequests.map((r) =>
+      r.from === request.from &&
+      r.to === request.to &&
+      r.timestamp === request.timestamp
+        ? { ...r, status: response }
+        : r
+    );
+    localStorage.setItem(CALL_REQUEST_KEY, JSON.stringify(updated));
+    setIncomingRequests((prev) =>
+      prev.map((r) =>
+        r.from === request.from &&
+        r.to === request.to &&
+        r.timestamp === request.timestamp
+          ? { ...r, status: response }
+          : r
+      )
+    );
 
-  //     if (!window.JitsiMeetExternalAPI) {
-  //       alert(
-  //         "Jitsi Meet API script not loaded. Please check your internet or script tag."
-  //       );
-  //       return;
-  //     }
-
-  //     const api = new window.JitsiMeetExternalAPI(domain, options);
-
-  //     api.addListener("videoConferenceJoined", () => {
-  //       console.log(`${currentUser.name} joined the room ${room}`);
-  //     });
-  //   };
-  const startCall = () => {
-    try {
-      if (!currentUser) return;
-
-      const offlineUsers = selectedUsers.filter((u) => !u.online);
-      if (offlineUsers.length > 0) {
-        alert(
-          `The following users are offline: ${offlineUsers
-            .map((u) => u.name)
-            .join(", ")}`
-        );
-        return;
-      }
-
-      if (!window.JitsiMeetExternalAPI) {
-        alert("Jitsi API not loaded yet!");
-        return;
-      }
-
-      const participants = [currentUser, ...selectedUsers]
-        .map((u) => u.name)
-        .join("-");
-      const room = `TestRoom-${participants}`;
-      setRoomName(room);
-
-      const domain = "meet.jit.si";
-      const options = {
-        roomName: room,
-        parentNode: jitsiContainerRef.current,
-        userInfo: { displayName: currentUser.name },
-      };
-
-      const api = new window.JitsiMeetExternalAPI(domain, options);
-      api.addListener("videoConferenceJoined", () => {
-        console.log(`${currentUser.name} joined the room ${room}`);
-      });
-    } catch (err) {
-      console.error("Error starting call:", err);
-      alert(
-        "Something went wrong starting the call. Check console for details."
-      );
+    if (response === "accepted") {
+      setRoomName(`Room-${request.from}-${currentUser.username}`);
     }
   };
+
+  // Initialize Jitsi
+  useEffect(() => {
+    if (roomName && jitsiContainerRef.current && window.JitsiMeetExternalAPI) {
+      new window.JitsiMeetExternalAPI("meet.jit.si", {
+        roomName,
+        parentNode: jitsiContainerRef.current,
+        userInfo: { displayName: currentUser.name },
+        configOverwrite: {
+          startWithAudioMuted: false,
+          startWithVideoMuted: false,
+        },
+      });
+    }
+  }, [roomName, currentUser]);
 
   return (
     <div style={{ padding: 20 }}>
       {!currentUser ? (
         <>
-          <h2>Select Your User</h2>
-          <div style={{ display: "flex", gap: 10 }}>
-            {USERS.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => handleLogin(user)}
-                style={{
-                  padding: "8px 14px",
-                  background: user.online ? "#4CAF50" : "#aaa",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                }}
-              >
-                {user.name} {user.online ? "🟢" : "🔴"}
-              </button>
-            ))}
-          </div>
+          <h2>Login</h2>
+          <input
+            placeholder="Username"
+            value={loginForm.username}
+            onChange={(e) =>
+              setLoginForm({ ...loginForm, username: e.target.value })
+            }
+            style={{ marginRight: 5 }}
+          />
+          <input
+            placeholder="Password"
+            type="password"
+            value={loginForm.password}
+            onChange={(e) =>
+              setLoginForm({ ...loginForm, password: e.target.value })
+            }
+            style={{ marginRight: 5 }}
+          />
+          <button onClick={handleLoginSubmit}>Login</button>
         </>
       ) : (
         <>
           <h3>Welcome, {currentUser.name} 👋</h3>
           <h4>Select users to call:</h4>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {USERS.filter((u) => u.id !== currentUser.id).map((user) => (
-              <button
-                key={user.id}
-                onClick={() => toggleUserSelect(user)}
-                style={{
-                  padding: "8px 14px",
-                  background: selectedUsers.find((u) => u.id === user.id)
-                    ? "#2196F3"
-                    : user.online
-                    ? "#4CAF50"
-                    : "#aaa",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                }}
-              >
-                {user.name} {user.online ? "🟢" : "🔴"}
-              </button>
-            ))}
+            {USERS.filter((u) => u.username !== currentUser.username).map(
+              (user) => (
+                <button
+                  key={user.username}
+                  onClick={() => toggleUserSelect(user)}
+                  style={{
+                    padding: "8px 14px",
+                    background: selectedUsers.find(
+                      (u) => u.username === user.username
+                    )
+                      ? "#2196F3"
+                      : "#4CAF50",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 5,
+                    cursor: "pointer",
+                  }}
+                >
+                  {user.name} 🟢
+                </button>
+              )
+            )}
           </div>
 
           <button
-            onClick={startCall}
+            onClick={sendCallRequest}
             style={{
               marginTop: 20,
               padding: "10px 18px",
@@ -193,15 +214,49 @@ export default function CallApp() {
               cursor: "pointer",
             }}
           >
-            Start Call
+            Send Call Request
           </button>
 
-          {roomName && (
-            <div
-              ref={jitsiContainerRef}
-              style={{ height: "500px", width: "100%", marginTop: 20 }}
-            ></div>
+          {/* Incoming call requests */}
+          {incomingRequests.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <h4>Incoming Call Requests (valid for 3 min):</h4>
+              {incomingRequests.map((r, idx) => (
+                <div key={idx}>
+                  Call from {r.from} - Status: {r.status}
+                  {r.status === "pending" && (
+                    <>
+                      <button
+                        onClick={() => respondToCall(r, "accepted")}
+                        style={{ marginLeft: 5 }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => respondToCall(r, "rejected")}
+                        style={{ marginLeft: 5 }}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
+
+          {callStatus && (
+            <div style={{ marginTop: 20, color: "red" }}>{callStatus}</div>
+          )}
+
+          <div
+            ref={jitsiContainerRef}
+            style={{
+              height: roomName ? "500px" : 0,
+              width: "100%",
+              marginTop: 20,
+            }}
+          ></div>
         </>
       )}
     </div>
