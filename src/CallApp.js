@@ -8,9 +8,12 @@ const USERS = [
 ];
 
 const CALL_REQUEST_KEY = "call_requests";
+const LOGIN_KEY = "current_user";
 
 export default function MultiBrowserCallApp() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(
+    JSON.parse(localStorage.getItem(LOGIN_KEY)) || null
+  );
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
@@ -32,9 +35,8 @@ export default function MultiBrowserCallApp() {
         (r) =>
           r.to === currentUser.username &&
           r.status === "pending" &&
-          now - r.timestamp < 180000 // 3 minutes
+          now - r.timestamp < 180000
       );
-
       setIncomingRequests(pending);
 
       // Auto-reject expired requests
@@ -76,8 +78,15 @@ export default function MultiBrowserCallApp() {
       (u) =>
         u.username === loginForm.username && u.password === loginForm.password
     );
-    if (user) setCurrentUser(user);
-    else alert("Invalid credentials");
+    if (user) {
+      setCurrentUser(user);
+      localStorage.setItem(LOGIN_KEY, JSON.stringify(user));
+    } else alert("Invalid credentials");
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(LOGIN_KEY);
   };
 
   const toggleUserSelect = (user) => {
@@ -175,7 +184,12 @@ export default function MultiBrowserCallApp() {
         </>
       ) : (
         <>
-          <h3>Welcome, {currentUser.name} 👋</h3>
+          <h3>
+            Welcome, {currentUser.name} 👋{" "}
+            <button onClick={handleLogout} style={{ marginLeft: 10 }}>
+              Logout
+            </button>
+          </h3>
           <h4>Select users to call:</h4>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {USERS.filter((u) => u.username !== currentUser.username).map(
