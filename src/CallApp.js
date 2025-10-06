@@ -326,8 +326,16 @@ export default function MultiBrowserCallApp() {
   }, []);
 
   const handleLogin = (user) => {
-    localStorage.setItem("loggedInUser", JSON.stringify(user));
-    setCurrentUser(user);
+    const loginTime = Date.now();
+    localStorage.setItem(
+      "loggedInUser",
+      JSON.stringify({ ...user, loginTime })
+    );
+    setCurrentUser({ ...user, loginTime });
+
+    // clear old call info
+    setCallStatus("");
+    setRoomName("");
   };
 
   const handleLogout = () => {
@@ -417,7 +425,11 @@ export default function MultiBrowserCallApp() {
       const data = snapshot.val() || {};
 
       Object.values(data).forEach((r) => {
-        if (r.from === currentUser.username) {
+        // Only consider calls sent after current login
+        if (
+          r.from === currentUser.username &&
+          r.timestamp >= currentUser.loginTime
+        ) {
           if (r.status === "accepted") {
             setCallStatus(`${r.to} accepted your call ✅`);
             setRoomName(`Room-${currentUser.username}-${r.to}`);
