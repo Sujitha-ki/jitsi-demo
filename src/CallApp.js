@@ -314,6 +314,9 @@ export default function MultiBrowserCallApp() {
         configOverwrite: {
           startWithAudioMuted: false,
           startWithVideoMuted: false,
+          SHOW_WATERMARK_FOR_GUESTS: false,
+          SHOW_BRAND_WATERMARK: false,
+          SHOW_POWERED_BY: false,
         },
       });
     }
@@ -364,12 +367,33 @@ export default function MultiBrowserCallApp() {
   };
 
   // ✅ Send call request (writes to Firebase /calls)
+  // const sendCallRequest = () => {
+  //   if (selectedUsers.length === 0) {
+  //     alert("Select at least one user.");
+  //     return;
+  //   }
+  //   const timestamp = Date.now();
+
+  //   selectedUsers.forEach((u) => {
+  //     push(ref(db, "calls"), {
+  //       from: currentUser.username,
+  //       to: u.username,
+  //       timestamp,
+  //       status: "pending",
+  //     });
+  //   });
+
+  //   alert("Call request sent ✅");
+  // };
+
   const sendCallRequest = () => {
     if (selectedUsers.length === 0) {
       alert("Select at least one user.");
       return;
     }
+
     const timestamp = Date.now();
+    const room = `Room-${currentUser.username}-${timestamp}`; // single room
 
     selectedUsers.forEach((u) => {
       push(ref(db, "calls"), {
@@ -377,9 +401,11 @@ export default function MultiBrowserCallApp() {
         to: u.username,
         timestamp,
         status: "pending",
+        roomName: room, // share room name
       });
     });
 
+    setRoomName(room); // Caller joins immediately
     alert("Call request sent ✅");
   };
 
@@ -407,13 +433,21 @@ export default function MultiBrowserCallApp() {
   }, [currentUser]);
 
   // ✅ Bob responds (accept / reject)
+  // const respondToCall = (request, response) => {
+  //   const callRef = ref(db, `calls/${request.id}`);
+  //   update(callRef, { status: response });
+
+  //   if (response === "accepted") {
+  //     const room = `Room-${request.from}-${currentUser.username}`;
+  //     setRoomName(room);
+  //   }
+  // };
   const respondToCall = (request, response) => {
     const callRef = ref(db, `calls/${request.id}`);
     update(callRef, { status: response });
 
     if (response === "accepted") {
-      const room = `Room-${request.from}-${currentUser.username}`;
-      setRoomName(room);
+      setRoomName(request.roomName); // Join the same room
     }
   };
 
