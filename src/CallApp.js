@@ -331,8 +331,19 @@ export default function MultiBrowserCallApp() {
   };
 
   const handleLogout = () => {
+    // Remove logged-in user
     localStorage.removeItem("loggedInUser");
     setCurrentUser(null);
+
+    // Clear call info
+    setCallStatus("");
+    setRoomName("");
+
+    // Dispose Jitsi instance if exists
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.dispose();
+      jitsiApiRef.current = null;
+    }
   };
 
   // ✅ Select users to call (Alice selecting Bob)
