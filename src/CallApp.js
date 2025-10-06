@@ -276,7 +276,7 @@
 //     </div>
 //   );
 // }
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ref, push, onValue, update } from "firebase/database";
 import { db } from "./firebase";
 
@@ -292,6 +292,29 @@ export default function MultiBrowserCallApp() {
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [callStatus, setCallStatus] = useState("");
   const [roomName, setRoomName] = useState("");
+  const jitsiContainerRef = useRef(null);
+  const jitsiApiRef = useRef(null);
+
+  useEffect(() => {
+    if (roomName && jitsiContainerRef.current && window.JitsiMeetExternalAPI) {
+      // Clear any existing instance before re-initializing
+      if (jitsiApiRef.current) {
+        jitsiApiRef.current.dispose();
+      }
+
+      jitsiApiRef.current = new window.JitsiMeetExternalAPI("meet.jit.si", {
+        roomName,
+        parentNode: jitsiContainerRef.current,
+        userInfo: {
+          displayName: currentUser.username,
+        },
+        configOverwrite: {
+          startWithAudioMuted: false,
+          startWithVideoMuted: false,
+        },
+      });
+    }
+  }, [roomName, currentUser]);
 
   // ✅ Login - just saves in localStorage
   useEffect(() => {
@@ -488,7 +511,12 @@ export default function MultiBrowserCallApp() {
       )}
 
       {/* Room */}
-      {roomName && renderRoom()}
+      {roomName && (
+        <div
+          ref={jitsiContainerRef}
+          style={{ height: "500px", width: "100%", marginTop: 20 }}
+        ></div>
+      )}
     </div>
   );
 }
