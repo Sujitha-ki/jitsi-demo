@@ -420,15 +420,6 @@ export default function MultiBrowserCallApp() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // ✅ UI for call room (Jitsi / placeholder)
-  const renderRoom = () => (
-    <div>
-      <h3>📞 Connected to room:</h3>
-      <p style={{ fontWeight: "bold" }}>{roomName}</p>
-      <p>(You can integrate Jitsi / WebRTC here)</p>
-    </div>
-  );
-
   // ✅ UI for login screen
   if (!currentUser) {
     return (
