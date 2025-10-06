@@ -281,9 +281,12 @@ import { ref, push, onValue, update } from "firebase/database";
 import { db } from "./firebase";
 
 const USERS = [
-  { id: 1, username: "Alice" },
-  { id: 2, username: "Bob" },
-  { id: 3, username: "Charlie" },
+  { id: 1, username: "Ram" },
+  { id: 2, username: "Iday" },
+  { id: 3, username: "PK" },
+  { id: 4, username: "Priya" },
+  { id: 5, username: "Suji" },
+  { id: 6, username: "Karthik" },
 ];
 
 export default function MultiBrowserCallApp() {
